@@ -558,6 +558,44 @@ type AddWorklogQueryOptions struct {
 // This can heavily differ between JIRA instances
 type CustomFields map[string]string
 
+// RemoteLink represents remote links which linked to issues
+type RemoteLink struct {
+	ID           int                    `json:"id,omitempty" structs:"id,omitempty"`
+	Self         string                 `json:"self,omitempty" structs:"self,omitempty"`
+	GlobalID     string                 `json:"globalId,omitempty" structs:"globalId,omitempty"`
+	Application  *RemoteLinkApplication `json:"application,omitempty" structs:"application,omitempty"`
+	Relationship string                 `json:"relationship,omitempty" structs:"relationship,omitempty"`
+	Object       *RemoteLinkObject      `json:"object,omitempty" structs:"object,omitempty"`
+}
+
+// RemoteLinkApplication represents remote links application
+type RemoteLinkApplication struct {
+	Type string `json:"type,omitempty" structs:"type,omitempty"`
+	Name string `json:"name,omitempty" structs:"name,omitempty"`
+}
+
+// RemoteLinkObject represents remote link object itself
+type RemoteLinkObject struct {
+	URL     string            `json:"url,omitempty" structs:"url,omitempty"`
+	Title   string            `json:"title,omitempty" structs:"title,omitempty"`
+	Summary string            `json:"summary,omitempty" structs:"summary,omitempty"`
+	Icon    *RemoteLinkIcon   `json:"icon,omitempty" structs:"icon,omitempty"`
+	Status  *RemoteLinkStatus `json:"status,omitempty" structs:"status,omitempty"`
+}
+
+// RemoteLinkIcon represents icon displayed next to link
+type RemoteLinkIcon struct {
+	Url16x16 string `json:"url16x16,omitempty" structs:"url16x16,omitempty"`
+	Title    string `json:"title,omitempty" structs:"title,omitempty"`
+	Link     string `json:"link,omitempty" structs:"link,omitempty"`
+}
+
+// RemoteLinkStatus if the link is a resolvable object (issue, epic) - the structure represent its status
+type RemoteLinkStatus struct {
+	Resolved bool            `json:"resolved,omitempty" structs:"resolved,omitempty"`
+	Icon     *RemoteLinkIcon `json:"icon,omitempty" structs:"icon,omitempty"`
+}
+
 // Get returns a full representation of the issue for the given issue key.
 // JIRA will attempt to identify the issue by the issueIdOrKey path parameter.
 // This can be an issue id, or an issue key.
@@ -1257,4 +1295,61 @@ func (c ChangelogHistory) CreatedTime() (time.Time, error) {
 	}
 	t, err := time.Parse("2006-01-02T15:04:05.999-0700", c.Created)
 	return t, err
+}
+
+// GetRemoteLinks gets remote issue links on the issue.
+//
+// Jira API docs: https://docs.atlassian.com/jira/REST/latest/#api/2/issue-getRemoteIssueLinks
+func (s *IssueService) GetRemoteLinks(id string) (*[]RemoteLink, *Response, error) {
+	apiEndpoint := fmt.Sprintf("rest/api/2/issue/%s/remotelink", id)
+	req, err := s.client.NewRequest("GET", apiEndpoint, nil)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	result := new([]RemoteLink)
+	resp, err := s.client.Do(req, result)
+	if err != nil {
+		err = NewJiraError(resp, err)
+	}
+	return result, resp, err
+}
+
+// AddRemoteLink adds a remote link to issueID.
+//
+// Jira API docs: https://developer.atlassian.com/cloud/jira/platform/rest/v2/#api-rest-api-2-issue-issueIdOrKey-remotelink-post
+func (s *IssueService) AddRemoteLink(issueID string, remotelink *RemoteLink) (*RemoteLink, *Response, error) {
+	apiEndpoint := fmt.Sprintf("rest/api/2/issue/%s/remotelink", issueID)
+	req, err := s.client.NewRequest("POST", apiEndpoint, remotelink)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	responseRemotelink := new(RemoteLink)
+	resp, err := s.client.Do(req, responseRemotelink)
+	if err != nil {
+		jerr := NewJiraError(resp, err)
+		return nil, resp, jerr
+	}
+
+	return responseRemotelink, resp, nil
+}
+
+// UpdateRemoteLink updates a remote issue link by linkID.
+//
+// Jira API docs: https://developer.atlassian.com/cloud/jira/platform/rest/v2/api-group-issue-remote-links/#api-rest-api-2-issue-issueidorkey-remotelink-linkid-put
+func (s *IssueService) UpdateRemoteLink(issueID string, linkID int, remotelink *RemoteLink) (*Response, error) {
+	apiEndpoint := fmt.Sprintf("rest/api/2/issue/%s/remotelink/%d", issueID, linkID)
+	req, err := s.client.NewRequest("PUT", apiEndpoint, remotelink)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := s.client.Do(req, nil)
+	if err != nil {
+		jerr := NewJiraError(resp, err)
+		return resp, jerr
+	}
+
+	return resp, nil
 }
